@@ -22,15 +22,13 @@ public class Game implements Runnable, KeyListener {
 	// ===============================================
 
 	public static final Dimension DIM = new Dimension(Toolkit.getDefaultToolkit().getScreenSize().width, Toolkit.getDefaultToolkit().getScreenSize().height - 20); //the dimension of the game.
-    public static final int DIMENSION_SCALAR = 5;
+    public static final int DIMENSION_SCALAR = 5; //Number of total screens across and high
     public static final int FRAMES_BETWEEN_BULLETS = 1;
-	private GamePanel gmpPanel;
-	public static Random R = new Random();
-	public final static int ANI_DELAY = 45; // milliseconds between screen
-											// updates (animation)
+	public final static int ANI_DELAY = 60; // milliseconds between screen updates (animation)
     private final static int BUMP_NUMBER = 15;
+    private GamePanel gmpPanel;
+    public static Random R = new Random();
 	private Thread thrAnim;
-	private int nTick = 0;
     private int framesSinceBullet = 0;
 
     private boolean fireBullets = false;
@@ -93,13 +91,8 @@ public class Game implements Runnable, KeyListener {
 		long lStartTime = System.currentTimeMillis();
 		// this thread animates the scene
 		while (Thread.currentThread() == thrAnim) {
-			tick();
-			gmpPanel.update(gmpPanel.getGraphics()); // update takes the graphics context we must
-														// surround the sleep() in a try/catch block
-														// this simply controls delay time between 
-														// the frames of the animation
-
-			//this might be a good place to check for collisions
+			gmpPanel.update(gmpPanel.getGraphics()); // update the graphics context
+			//Execute by Frame operations
 			checkCollisions();
             spawnAsteroids();
             spawnWorkers();
@@ -118,8 +111,8 @@ public class Game implements Runnable, KeyListener {
 				// just skip this frame -- no big deal
 				continue;
 			}
-		} // end while
-	} // end run
+		}
+	}
 
 	private void checkCollisions() {
 		Point pntMovOneCenter, pntMovTwoCenter;
@@ -136,7 +129,7 @@ public class Game implements Runnable, KeyListener {
                             checkWorkerSinistar(spriteOne, spriteTwo);
                             checkCollisionCrystal(spriteOne, spriteTwo);
                             checkFalconSinistar(spriteOne, spriteTwo);
-                            checkBulletBomb(spriteOne, spriteTwo);
+                            checkProjectile(spriteOne, spriteTwo);
                         }
                     }
 				}
@@ -188,6 +181,7 @@ public class Game implements Runnable, KeyListener {
 	}
 
 	private void checkBump(Sprite movOne, Sprite movTwo) {
+        //If two normal objects have collided, move them apart
 		if (!(movOne instanceof Bullet) && !(movOne instanceof Crystal) && !(movOne instanceof Sinistar)) {
 			if (!(movTwo instanceof Bullet) && !(movTwo instanceof Crystal) && !(movTwo instanceof Sinistar)) {
 				adjustBump(movOne, movTwo);
@@ -220,6 +214,7 @@ public class Game implements Runnable, KeyListener {
 
 	private void checkWorkerSinistar(Sprite movOne, Sprite movTwo) {
 		if (movOne instanceof WorkerShip && movTwo instanceof Sinistar) {
+            //If WorkerShip has a Crystal, pass it to the Sinistar and play the piece sound
 			if (((WorkerShip) movOne).hasCrystal() && ((Sinistar) movTwo).getNumPieces() < Sinistar.MAX_PIECES) {
 				((WorkerShip) movOne).setCrystal(false);
 				((Sinistar) movTwo).setNumPieces(((Sinistar) movTwo).getNumPieces() + 1);
@@ -230,6 +225,7 @@ public class Game implements Runnable, KeyListener {
 
 	private void checkCollisionCrystal(Sprite movOne, Sprite movTwo) {
 		if (movOne instanceof Crystal) {
+            //If collides with empty WorkerShip, WorkerShip picks up the Crystal
 			if (movTwo instanceof WorkerShip) {
 				if (!((WorkerShip) movTwo).hasCrystal()){
 					CommandCenter.getInstance().getOpsList().enqueue(movOne, CollisionOp.Operation.REMOVE);
@@ -237,6 +233,7 @@ public class Game implements Runnable, KeyListener {
 				}
 			}
 			else if (movTwo instanceof Falcon) {
+                //If collides with Falcon, Falcon picks up Crystal and plays the crystal noise
 				CommandCenter.getInstance().setScore(CommandCenter.getInstance().getScore() + movOne.getSpriteScore());
 				CommandCenter.getInstance().getOpsList().enqueue(movOne, CollisionOp.Operation.REMOVE);
 				((Falcon) movTwo).setNumSinibombs(((Falcon) movTwo).getNumSinibombs() + 1);
@@ -247,6 +244,7 @@ public class Game implements Runnable, KeyListener {
 
 	private void checkFalconSinistar(Sprite movOne, Sprite movTwo) {
 		if (movOne instanceof Falcon && movTwo instanceof Sinistar) {
+            //If Falcon is caught by Sinistar, remove life and respawn
 			if (((Sinistar) movTwo).isAlive()){
 				CommandCenter.getInstance().getOpsList().enqueue(movOne, CollisionOp.Operation.REMOVE);
 				movTwo.setCenter(new Point(Game.R.nextInt(Game.DIMENSION_SCALAR * Game.DIM.width),
@@ -256,33 +254,40 @@ public class Game implements Runnable, KeyListener {
 		}
 	}
 
-	private void checkBulletBomb(Sprite movOne, Sprite movTwo) {
+	private void checkProjectile(Sprite movOne, Sprite movTwo) {
 		if ((movOne instanceof Bullet || movOne instanceof Bomb) && !(movTwo instanceof Crystal || movTwo instanceof Bullet)){
-			adjustBulletBomb(movOne, movTwo);
+			adjustProjectile(movOne, movTwo);
 		}
 	}
 
-	private void adjustBulletBomb(Sprite projectile, Sprite target) {
+	private void adjustProjectile(Sprite projectile, Sprite target) {
 		if (target instanceof Asteroid || (target instanceof DestroyableFoe && projectile.getTeam() == Movable.Team.FRIEND)) {
-			CommandCenter.getInstance().getOpsList().enqueue(projectile, CollisionOp.Operation.REMOVE);
+			//Remove Projectile
+            CommandCenter.getInstance().getOpsList().enqueue(projectile, CollisionOp.Operation.REMOVE);
+            //Check to see if foe releases a Crystal
 			if (((DestroyableFoe) target).mineCrystal()) {
 				CommandCenter.getInstance().getOpsList().enqueue(new Crystal(target.getCenter()), CollisionOp.Operation.ADD);
 			}
+			//Remove one health if projectile is a bullet
 			if (projectile instanceof Bullet){
 				((DestroyableFoe) target).setHealth(((DestroyableFoe) target).getHealth() - 1);
 			}
+			//Else if it's a Bomb, kill the foe
 			else if (projectile instanceof Bomb){
 				((DestroyableFoe) target).setHealth(0);
 			}
 
+			//If Foe is dead, remove it and add an explosion
 			if (((DestroyableFoe) target).getHealth() <= 0){
 				CommandCenter.getInstance().getOpsList().enqueue(new Explosion(target), CollisionOp.Operation.ADD);
-				if (target instanceof TurretShip){
+				//If target was a lockedon turret, removes the lockon status for the entire class, allowing another to lockon
+                if (target instanceof TurretShip){
 					if (((TurretShip) target).getLockon_point() != null){
 						TurretShip.setLockedOnTurret(false);
 					}
 				}
 				killFoe(target);
+                //If the projectile was fired by the player, play a noise. Otherwise, explosions are always going off
 				if (projectile.getTeam() == Movable.Team.FRIEND) {
 					CommandCenter.getInstance().setScore(CommandCenter.getInstance().getScore() + target.getSpriteScore());
 					Sound.playSound("kapow.wav");
@@ -290,6 +295,7 @@ public class Game implements Runnable, KeyListener {
 			}
 		}
 
+		//If a Bomb hits Sinistar, destroy a piece
 		else if (target instanceof Sinistar && projectile instanceof Bomb){
 			CommandCenter.getInstance().getOpsList().enqueue(projectile, CollisionOp.Operation.REMOVE);
 			((Sinistar) target).setNumPieces(Math.max(((Sinistar) target).getNumPieces() - 1, 0));
@@ -298,6 +304,7 @@ public class Game implements Runnable, KeyListener {
 			Sound.playSound("kapow.wav");
 		}
 
+		//If a Bullet hits the Falcon, remove one health and check for death.
 		else if (target instanceof Falcon && projectile.getTeam() == Movable.Team.FOE) {
 			CommandCenter.getInstance().getOpsList().enqueue(projectile, CollisionOp.Operation.REMOVE);
 			if (!((Falcon) target).getProtected()){
@@ -312,6 +319,7 @@ public class Game implements Runnable, KeyListener {
 		}
 	}
 
+	//Checks to see if each Turret is supposed to be firing and fires a bullet if so
     private void fireTurrets() {
 		for (Movable movFoe : CommandCenter.getInstance().getMovFoes()) {
 			if (movFoe instanceof TurretShip) {
@@ -331,6 +339,7 @@ public class Game implements Runnable, KeyListener {
 		}
 	}
 
+	//Checks to see if Falcon is supposed to be firing
 	private void fireFalcon(){
 		if (fireBullets && framesSinceBullet >= FRAMES_BETWEEN_BULLETS && CommandCenter.getInstance().isPlaying()) {
 			CommandCenter.getInstance().getOpsList().enqueue(new Bullet(
@@ -344,7 +353,7 @@ public class Game implements Runnable, KeyListener {
 	}
 
 	private void killFoe(Sprite movFoe) {
-		
+		//Removes foe from map and decrements count of each foe
 		if (movFoe instanceof Asteroid){
             CommandCenter.getInstance().setNumAsteroids(CommandCenter.getInstance().getNumAsteroids() - 1);
 		}
@@ -360,20 +369,7 @@ public class Game implements Runnable, KeyListener {
 		CommandCenter.getInstance().getOpsList().enqueue(movFoe, CollisionOp.Operation.REMOVE);
 	}
 
-	//some methods for timing events in the game,
-	//such as the appearance of UFOs, floaters (power-ups), etc. 
-	public void tick() {
-		if (nTick == Integer.MAX_VALUE)
-			nTick = 0;
-		else
-			nTick++;
-	}
-
-	public int getTick() {
-		return nTick;
-	}
-
-	// Called when user presses 's'
+	// Called when user presses 's', clears initial setup and starts the game
 	private void startGame() {
 		CommandCenter.getInstance().clearAll();
 		CommandCenter.getInstance().initGame();
@@ -381,13 +377,14 @@ public class Game implements Runnable, KeyListener {
 		CommandCenter.getInstance().setPaused(false);
 	}
 
-	//this method spawns new asteroids
+	//Tells CommandCenter to spawn new units
 	private void spawnAsteroids() {
         CommandCenter.getInstance().spawnAsteroids();
 	}
 	private void spawnTurrets() {CommandCenter.getInstance().spawnTurrets();}
     private void spawnWorkers() {CommandCenter.getInstance().spawnWorkers();}
 
+    //Called when user pushes SPECIAL, adds a SiniBomb to the map at Falcon's location
 	private void dropSinibomb() {
         Falcon falcon = CommandCenter.getInstance().getFalcon();
         if (falcon.getNumSinibombs() >= 1) {
@@ -420,7 +417,6 @@ public class Game implements Runnable, KeyListener {
 	public void keyPressed(KeyEvent e) {
 		Falcon fal = CommandCenter.getInstance().getFalcon();
 		int nKey = e.getKeyCode();
-		//System.out.println(nKey);
 
 		if (nKey == START && !CommandCenter.getInstance().isPlaying())
 			startGame();
